@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Environment variables (CRITICAL)
+.env
+
+# Chroma / vector DB
+chroma_store/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+

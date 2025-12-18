@@ -1,0 +1,2 @@
+POST /api/v1/otp/send   -> 200, 429
+POST /api/v1/otp/verify -> 200, 400, 401, 423 (locked)
