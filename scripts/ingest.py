@@ -86,6 +86,8 @@ def main():
     count = 0
 
     for path in paths:
+        print(f"[INGEST] Processing file: {path}")   # ✅ ADD THIS LINE
+
         raw = load_doc(path)
         if not raw.strip():
             continue

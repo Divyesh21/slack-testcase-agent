@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Slack Test-Case Bot
+  Lambda (container image) + HTTP API Gateway + IAM role.
+  Secrets are read from SSM Parameter Store — see DEPLOYMENT.md for setup.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameters
+# All secrets are stored in SSM Parameter Store as SecureString.
+# Run  deploy/setup_ssm_secrets.sh  once to populate them, then deploy.
+# ─────────────────────────────────────────────────────────────────────────────
+Parameters:
+  # ECR image URI — set by samconfig.toml or passed on the CLI
+  ImageUri:
+    Type: String
+    Description: "Full ECR image URI, e.g. 123456789012.dkr.ecr.ap-south-1.amazonaws.com/slack-testcase-bot:latest"
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: "Deployment environment tag"
+
+  # SSM parameter paths for secrets
+  SsmSlackBotToken:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /slack-testcase-bot/SLACK_BOT_TOKEN
+
+  SsmSlackSigningSecret:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /slack-testcase-bot/SLACK_SIGNING_SECRET
+
+  SsmOpenAIApiKey:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /slack-testcase-bot/OPENAI_API_KEY
+
+  SsmJiraBaseUrl:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /slack-testcase-bot/JIRA_BASE_URL
+
+  SsmJiraEmail:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /slack-testcase-bot/JIRA_EMAIL
+
+  SsmJiraApiToken:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /slack-testcase-bot/JIRA_API_TOKEN
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Globals
+# ─────────────────────────────────────────────────────────────────────────────
+Globals:
+  Function:
+    Architectures: [x86_64]
+    Timeout: 300          # 5 minutes — generous for OpenAI + ChromaDB
+    MemorySize: 1024      # 1 GB — ChromaDB benefits from headroom
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resources
+# ─────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Lambda function ──────────────────────────────────────────────────────────
+  SlackTestCaseBot:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "slack-testcase-bot-${Environment}"
+      Description: "Generates QA test cases from Slack slash commands"
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN:      !Ref SsmSlackBotToken
+          SLACK_SIGNING_SECRET: !Ref SsmSlackSigningSecret
+          OPENAI_API_KEY:       !Ref SsmOpenAIApiKey
+          JIRA_BASE_URL:        !Ref SsmJiraBaseUrl
+          JIRA_EMAIL:           !Ref SsmJiraEmail
+          JIRA_API_TOKEN:       !Ref SsmJiraApiToken
+          # ChromaDB persists to /tmp (ephemeral per container).
+          # If you want shared persistence across cold starts, mount an EFS volume
+          # and point PERSIST_DIR at the mount path.
+          PERSIST_DIR: "/tmp/chroma_store"
+
+      Events:
+        SlackEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SlackHttpApi
+            Path: /slack/events
+            Method: POST
+
+  # ── HTTP API Gateway ─────────────────────────────────────────────────────────
+  SlackHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Description: "API Gateway for Slack Test-Case Bot"
+      StageName: "$default"
+      Tags:
+        Project: slack-testcase-bot
+        Environment: !Ref Environment
+
+  # ── IAM execution role ───────────────────────────────────────────────────────
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "slack-testcase-bot-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        # Needed for slack_bolt lazy listeners: the Lambda invokes itself
+        # a second time to run the deferred (heavy) processing.
+        - PolicyName: LambdaSelfInvoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:slack-testcase-bot-${Environment}"
+
+  # ── CloudWatch log group (explicit for retention control) ────────────────────
+  BotLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/slack-testcase-bot-${Environment}"
+      RetentionInDays: 30
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ─────────────────────────────────────────────────────────────────────────────
+Outputs:
+  SlackEndpointUrl:
+    Description: >
+      Paste this URL into the Slack app configuration as the Request URL
+      for the /testcases slash command.
+    Value: !Sub "https://${SlackHttpApi}.execute-api.${AWS::Region}.amazonaws.com/slack/events"
+
+  LambdaFunctionArn:
+    Description: "Lambda function ARN"
+    Value: !GetAtt SlackTestCaseBot.Arn
+
+  LambdaFunctionName:
+    Description: "Lambda function name"
+    Value: !Ref SlackTestCaseBot

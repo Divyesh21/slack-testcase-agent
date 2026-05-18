@@ -1,20 +1,44 @@
-# Python bytecode
+# ── Secrets — NEVER commit these ──────────────────────────────────────────────
+.env
+*.pem
+*.key
+
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 
-# Virtual environment
+# ── Virtual environments ───────────────────────────────────────────────────────
 venv/
+.venv/
+.lambda-venv/
 env/
 
-# Environment variables
-.env
+# ── Build artefacts ───────────────────────────────────────────────────────────
+# macOS-built Lambda package — wrong platform binaries, use Dockerfile instead
+lambda-package/
+*.zip
 
-# macOS system files
+# ChromaDB local store (ephemeral dev data)
+chroma_store/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
+.AppleDouble
 
-# Editor config
+# ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
-.env
+*.swo
+
+# ── SAM / CloudFormation build cache ─────────────────────────────────────────
+.aws-sam/
+
+# ── Local dev only ────────────────────────────────────────────────────────────
+.dev-venv/
+*.save
+
+# ── Duplicate / legacy files ──────────────────────────────────────────────────
+"editage_kb/chinaNew (2).docx"

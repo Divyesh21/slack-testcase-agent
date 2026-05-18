@@ -1,0 +1,29 @@
+# SAM CLI configuration for the Slack Test-Case Bot.
+# Docs: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html
+#
+# Usage:
+#   sam build   --config-env production
+#   sam deploy  --config-env production
+
+version = 0.1
+
+# ── Production ────────────────────────────────────────────────────────────────
+[production.global.parameters]
+stack_name    = "slack-testcase-bot"
+region        = "ap-south-1"          # ← change to your target region
+confirm_changeset = true
+capabilities  = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+# ImageUri is set dynamically by deploy/build_and_push.sh — do not hard-code here.
+
+[production.deploy.parameters]
+parameter_overrides = "Environment=production"
+
+# ── Staging ───────────────────────────────────────────────────────────────────
+[staging.global.parameters]
+stack_name    = "slack-testcase-bot-staging"
+region        = "ap-south-1"
+confirm_changeset = false
+capabilities  = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+
+[staging.deploy.parameters]
+parameter_overrides = "Environment=staging"
